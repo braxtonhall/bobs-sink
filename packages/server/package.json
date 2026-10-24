@@ -1,0 +1,44 @@
+{
+	"name": "@bobs-sink/server",
+	"version": "0.1.0",
+	"private": true,
+	"description": "The bobs-sink document service",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"scripts": {
+		"start": "node dist/main.js",
+		"dev": "tsx watch --conditions=source src/main.ts",
+		"typecheck": "tsc --noEmit",
+		"db:generate": "tsc -b ../protocol/tsconfig.build.json && drizzle-kit generate"
+	},
+	"dependencies": {
+		"@bobs-sink/protocol": "0.1.0",
+		"@hono/node-server": "^2.1.5",
+		"@simplewebauthn/server": "^14.0.3",
+		"ajv": "^8.20.0",
+		"better-sqlite3": "^13.0.3",
+		"drizzle-orm": "^0.45.4",
+		"hono": "^4.13.13",
+		"lib0": "^0.2.119",
+		"pino": "^10.4.0",
+		"ws": "^8.22.0",
+		"y-protocols": "^1.0.7",
+		"yjs": "^13.6.33",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@bobs-sink/test-support": "0.1.0",
+		"@types/better-sqlite3": "^9.6.0",
+		"@types/ws": "^8.18.2",
+		"drizzle-kit": "^0.31.11",
+		"pino-pretty": "^13.2.0",
+		"tsx": "^4.23.15"
+	}
+}

@@ -1,0 +1,20 @@
+{
+	"name": "@bobs-sink/demo",
+	"version": "0.1.0",
+	"private": true,
+	"description": "A page for trying the bobs-sink client against a local service",
+	"license": "MIT",
+	"type": "module",
+	"scripts": {
+		"dev": "tsx scripts/dev.ts",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p scripts"
+	},
+	"dependencies": {
+		"@bobs-sink/client": "0.1.0",
+		"yjs": "^13.6.33"
+	},
+	"devDependencies": {
+		"@bobs-sink/server": "0.1.0",
+		"vite": "^8.3.5"
+	}
+}

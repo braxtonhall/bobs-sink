@@ -1,0 +1,184 @@
+:root {
+	--bg: #f6f6f3;
+	--card: #ffffff;
+	--text: #1d1d1b;
+	--muted: #6b6b66;
+	--border: #deded8;
+	--accent: #2f6fdb;
+	--good: #2e8b57;
+	--warn: #b7791f;
+	--bad: #c0392b;
+	color-scheme: light dark;
+	font:
+		15px/1.5 system-ui,
+		sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #161615;
+		--card: #1f1f1d;
+		--text: #ecece8;
+		--muted: #9a9a94;
+		--border: #34342f;
+		--accent: #6d9cf0;
+	}
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+}
+
+main {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 24px 16px 64px;
+	display: grid;
+	gap: 16px;
+}
+
+h1 {
+	margin: 0 0 8px;
+	font-size: 1.5rem;
+}
+
+h2 {
+	margin: 0 0 8px;
+	font-size: 1.05rem;
+}
+
+.card {
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 16px;
+}
+
+.status {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 2px 16px;
+	margin: 0;
+}
+
+.status dt {
+	color: var(--muted);
+}
+
+.status dd {
+	margin: 0;
+	font-family: ui-monospace, monospace;
+}
+
+.sync-synced {
+	color: var(--good);
+}
+
+.sync-connecting,
+.sync-offline {
+	color: var(--warn);
+}
+
+.sync-stopped {
+	color: var(--bad);
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.hint {
+	color: var(--muted);
+	margin: 0 0 8px;
+}
+
+.warning {
+	color: var(--warn);
+	margin: 0 0 8px;
+}
+
+.choices {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+	display: grid;
+	gap: 8px;
+}
+
+button {
+	font: inherit;
+	padding: 6px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+	border-color: var(--accent);
+}
+
+button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+input,
+textarea {
+	font: inherit;
+	padding: 6px 8px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	box-sizing: border-box;
+}
+
+input {
+	flex: 1;
+	min-width: 0;
+}
+
+textarea {
+	width: 100%;
+	resize: vertical;
+}
+
+.items {
+	list-style: none;
+	padding: 0;
+	margin: 12px 0 0;
+	display: grid;
+	gap: 4px;
+}
+
+.items li {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+}
+
+.log {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	font-family: ui-monospace, monospace;
+	font-size: 0.85rem;
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.log time {
+	color: var(--muted);
+}
+
+.log .error {
+	color: var(--bad);
+}

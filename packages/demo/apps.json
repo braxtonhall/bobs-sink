@@ -1,0 +1,9 @@
+{
+	"apps": {
+		"localhost": {
+			"schema": {
+				"roots": { "items": "map", "notes": "text" }
+			}
+		}
+	}
+}

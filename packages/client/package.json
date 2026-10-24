@@ -1,0 +1,37 @@
+{
+	"name": "@bobs-sink/client",
+	"version": "0.1.0",
+	"description": "Browser client for bobs-sink: passkey identity, device keys, and Yjs sync",
+	"license": "MIT",
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"typecheck": "tsc --noEmit && tsc --noEmit -p test"
+	},
+	"dependencies": {
+		"@bobs-sink/protocol": "0.1.0",
+		"@simplewebauthn/browser": "^14.0.0",
+		"lib0": "^0.2.119",
+		"y-indexeddb": "^9.0.12",
+		"y-protocols": "^1.0.7"
+	},
+	"peerDependencies": {
+		"yjs": "^13.6.0"
+	},
+	"devDependencies": {
+		"@bobs-sink/server": "0.1.0",
+		"@bobs-sink/test-support": "0.1.0",
+		"fake-indexeddb": "^6.2.6",
+		"yjs": "^13.6.33"
+	}
+}

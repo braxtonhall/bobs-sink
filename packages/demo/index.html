@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>bobs-sink demo</title>
+	</head>
+	<body>
+		<main>
+			<header>
+				<h1>bobs-sink demo</h1>
+				<dl id="status" class="status"></dl>
+			</header>
+
+			<section class="card">
+				<h2>Account</h2>
+				<div id="account"></div>
+			</section>
+
+			<section class="card">
+				<h2>Items</h2>
+				<p class="hint">A map keyed by ID: edits from different devices merge by key.</p>
+				<form id="add-item" class="row">
+					<input name="text" placeholder="Add an item" autocomplete="off" required />
+					<button>Add</button>
+				</form>
+				<ul id="items" class="items"></ul>
+			</section>
+
+			<section class="card">
+				<h2>Notes</h2>
+				<p class="hint">A shared text: type in two browsers at once, or offline in both, and the edits interleave.</p>
+				<textarea id="notes" rows="6"></textarea>
+			</section>
+
+			<section class="card">
+				<h2>Events</h2>
+				<ol id="log" class="log"></ol>
+			</section>
+		</main>
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>

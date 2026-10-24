@@ -1,0 +1,9 @@
+{
+	// Tests run in Node against a real server, with fake-indexeddb standing in for the browser's.
+	"extends": "../../../tsconfig.source.json",
+	"compilerOptions": {
+		"lib": ["ES2024", "DOM", "DOM.Iterable"],
+		"types": ["node"]
+	},
+	"include": [".", "../src"]
+}

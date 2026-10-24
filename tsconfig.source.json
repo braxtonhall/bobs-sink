@@ -1,0 +1,9 @@
+{
+	// For type checking and tests: workspace packages resolve to their TypeScript sources, so nothing needs
+	// building first. Builds use tsconfig.build.json, which resolves to built output.
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"customConditions": ["source"],
+		"noEmit": true
+	}
+}

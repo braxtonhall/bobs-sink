@@ -1,0 +1,10 @@
+{
+	// Root-level config files only; each package has its own tsconfig.json.
+	"extends": "./tsconfig.source.json",
+	"compilerOptions": {
+		"types": ["node"],
+		"allowJs": true,
+		"checkJs": false
+	},
+	"include": ["*.ts", "*.js"]
+}
