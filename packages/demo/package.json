@@ -6,7 +6,7 @@
 	"license": "MIT",
 	"type": "module",
 	"scripts": {
-		"dev": "tsx scripts/dev.ts",
+		"dev": "tsx --conditions=source scripts/dev.ts",
 		"typecheck": "tsc --noEmit && tsc --noEmit -p scripts"
 	},
 	"dependencies": {

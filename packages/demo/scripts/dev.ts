@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createLogger, createSink, loadConfig } from "@bobs-sink/server";
 
 /**
  * Runs the service (from source, with demo settings) and the page twice, on two ports. Browser storage is per
@@ -16,10 +17,17 @@ const sinkEnvironment = {
 	HOST: "127.0.0.1",
 	ALLOW_LOCALHOST: "true",
 	DATABASE_PATH: ".data/sink.sqlite",
-	APPS_FILE: "apps.json",
 	ADMIN_TOKEN: "demo",
 	LOG_LEVEL: "info",
 };
+
+// Register the demo's app in its database, as an operator would from the console, before the service starts.
+const setup = createSink({
+	config: loadConfig({ ...sinkEnvironment, DATABASE_PATH: `${demoDirectory}/.data/sink.sqlite` }),
+	logger: createLogger("silent"),
+});
+setup.apps.register("localhost", { schema: { roots: { items: "map", notes: "text" } } });
+await setup.close();
 
 const sink = spawn("tsx", ["--conditions=source", "../server/src/main.ts"], {
 	cwd: demoDirectory,

@@ -2,7 +2,7 @@
 
 A small, self-hostable CRDT document service. It starts as anonymous cloud saves for my websites and grows into a general managed document service for people I know.
 
-Status: Phases 1 (the service, `packages/server`) and 2 (the client library, `packages/client`) are implemented in this repo. Next is the operator console (§12, registering apps from a page instead of the apps file, with operators signed in through bobs-server SSO, §13), together with the bobs-server SSO endpoints and the deployment (§14). After that, the first site integration (findcalvinandhobbes.com) is designed separately. Notes marked **Implemented:** record decisions made while building; notes marked **Planned:** are designed but not built.
+Status: Phases 1 (the service, `packages/server`) and 2 (the client library, `packages/client`) are implemented in this repo, and so is the operator console (§12, registering apps from a page, with operators signed in through bobs-server SSO, §13). The bobs-server SSO endpoints and the deployment (§14) are done; what's left of Phase 2b is configuring the console in production and registering findcalvinandhobbes.com from it. After that, the first site integration (findcalvinandhobbes.com) is designed separately. Notes marked **Implemented:** record decisions made while building; notes marked **Planned:** are designed but not built.
 
 ---
 
@@ -293,7 +293,7 @@ Build the `epoch` field into the format from day one. Routine (e.g. monthly) for
 
 ### Registering apps: the operator console
 
-**Planned.** Today registered apps are listed in a JSON file (`APPS_FILE`) read at startup. They move into the database and are managed from a small server-rendered page on the service, so registering `findcalvinandhobbes.com` doesn't need a file edit and a restart.
+**Implemented.** Registered apps used to be listed in a JSON file (`APPS_FILE`) read at startup. They now live in the database and are managed from a small server-rendered page on the service, so registering `findcalvinandhobbes.com` doesn't need a file edit and a restart.
 
 - **Storage:** the `apps` table (today: every RP ID the service has seen) gains a nullable `policy` column holding the app's overrides (the same shape as one entry of the apps file: limits and `schema`) and `registeredAt` / `updatedAt`. A row with a policy is registered; without one it is implicit. Registering an RP ID the service hasn't seen yet inserts the row.
 - **Defaults:** the registered and implicit defaults stay in code (`AppPolicy.ts`). `APPS_FILE` is removed rather than kept beside the database, so there is one source of truth.
@@ -301,17 +301,18 @@ Build the `epoch` field into the format from day one. Routine (e.g. monthly) for
 - **Validation on save:** the policy is parsed with the existing zod schema, and its JSON Schema is compiled with the same strict Ajv the rules use, so a bad schema is refused at the form rather than failing at the next update.
 - **Changing a schema doesn't re-check existing documents.** Tightening it can leave a document that rejects every update until it's fixed. The page warns when the app has documents.
 - **Unregistering** clears the policy; the app falls back to the implicit defaults. Existing documents are kept, even above the implicit limits.
+- **Rendering:** the pages are Hono JSX rendered on the server, with plain HTML forms and no client script. The existing `/v1` routes are for device-signed identities, so a client-side app would have needed its own operator API and a frontend build; server rendering needs neither.
 - **Page:** `/operator` lists apps (registered first, then implicit ones the service has seen, with document counts and storage). Each app has a form for its limits (blank means default) and a JSON field for `schema` (`roots` and `jsonSchema`). Registering takes an RP ID plus the same form.
 - **Tests and the demo** register apps without the page: `Sink` exposes the app registry (`sink.apps.register(rpId, policy)`), and the demo's dev script registers `localhost` in its database before starting the service.
 - The admin token route (`POST /admin/documents/:id/epochs`) stays. Moving it onto the page is a later convenience.
 
 ### Operators
 
-**Planned.** Only operators can open the console. For now that's me: `OPERATOR_EMAILS` is a comma-separated list of email addresses (compared case-insensitively), set in the service's environment.
+**Implemented.** Only operators can open the console. For now that's me: `OPERATOR_EMAILS` is a comma-separated list of email addresses (compared case-insensitively), set in the service's environment.
 
 - Operators sign in through bobs-server SSO (§13), which proves the email address; bobs-sink checks it against `OPERATOR_EMAILS`. bobs-server only says who the person is; the whitelist lives here.
 - The whitelist is checked at sign-in and again on every request, so removing an address takes effect immediately.
-- **Sessions:** a random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to `/operator`, stored hashed in an `operator_sessions` table with the email and an expiry (12 hours). Signing out deletes the row.
+- **Sessions:** a random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to `/operator`, stored hashed in an `operator_sessions` table with the email, the bobs-server `sub` and an expiry (12 hours, not extended by use). Signing out deletes the row; the hourly maintenance removes expired ones.
 - **CSRF:** every change is a form `POST`, which `SameSite=Lax` already keeps cross-site requests from carrying the cookie on; the server also requires the `Origin` header to match `PUBLIC_URL`.
 - **Login CSRF:** the SSO `state` is random, set in a short-lived cookie when sign-in starts, and must match on the callback.
 - **Configuration:** `PUBLIC_URL` (the service's own origin, e.g. `https://sink.bobs-server.net`, to build the callback URL), `SSO_URL` (`https://bobs-server.net/sso`), `SSO_EXCHANGE_URL` (internal, see §13), `SSO_EXCHANGE_SECRET` and `OPERATOR_EMAILS`. The console is mounted only when all are set; setting some but not all is a startup error.
@@ -376,11 +377,11 @@ Alternative to keep in mind: managed accounts as passkey identities I've granted
 - Yjs provider + local persistence
 - Sign-in result handling, merge / discard / keep-separate, epoch rebuild flow
 
-**Phase 2b — operating it** (planned, next)
+**Phase 2b — operating it** (in progress)
 
-- bobs-server: SSO endpoints, a mode for running behind a proxy (§13, §14)
-- Deployment: Caddy in front of both services, `sink.bobs-server.net` (§14)
-- bobs-sink: operator console with apps in the database, operator whitelist via SSO (§12); then register findcalvinandhobbes.com from it
+- bobs-server: SSO endpoints, a mode for running behind a proxy (§13, §14) (done)
+- Deployment: Caddy in front of both services, `sink.bobs-server.net` (§14) (done)
+- bobs-sink: operator console with apps in the database, operator whitelist via SSO (§12) (implemented); next, configure it in production and register findcalvinandhobbes.com from it
 
 **Phase 3 — first site integration**
 

@@ -1,5 +1,5 @@
 import type { DocumentPersistence } from "./DocumentPersistence.js";
-import type { DocumentRulesProvider } from "./DocumentRules.js";
+import type { DocumentRules, DocumentRulesProvider } from "./DocumentRules.js";
 import { LiveDocument, type CloseReason, type CompactionSettings, type DocumentSubscriber } from "./LiveDocument.js";
 
 export type RegistrySettings = {
@@ -72,6 +72,15 @@ export class LiveDocumentRegistry {
 
 	isLive(id: string): boolean {
 		return this.live.has(id);
+	}
+
+	/** Swaps in an app's new rules on its loaded documents. */
+	replaceRules(appId: string, rules: DocumentRules): void {
+		for (const document of this.live.values()) {
+			if (document.metadata.appId === appId) {
+				document.setRules(rules);
+			}
+		}
 	}
 
 	/** Unloads a document that is being deleted, without compacting it. */

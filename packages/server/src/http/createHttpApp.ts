@@ -16,6 +16,7 @@ import { adminRoutes } from "./routes/adminRoutes.js";
 import { documentRoutes } from "./routes/documentRoutes.js";
 import { identityRoutes, type IdentityRouteServices } from "./routes/identityRoutes.js";
 import { meRoutes } from "./routes/meRoutes.js";
+import { operatorRoutes, type OperatorRouteServices } from "./routes/operatorRoutes.js";
 import { syncRoute } from "./routes/syncRoute.js";
 
 export type HttpServices = IdentityRouteServices & {
@@ -24,6 +25,8 @@ export type HttpServices = IdentityRouteServices & {
 	requestVerifier: RequestVerifier;
 	sync: SyncSessionDependencies;
 	logger: Logger;
+	/** The operator console; undefined when it isn't configured. */
+	operator: OperatorRouteServices | undefined;
 };
 
 export type HttpOptions = {
@@ -63,6 +66,10 @@ export function createHttpApp(services: HttpServices, options: HttpOptions) {
 	if (options.adminToken !== undefined) {
 		app.use("/admin/*", requireAdmin(options.adminToken));
 		app.route("/admin", adminRoutes(services.documents));
+	}
+
+	if (services.operator !== undefined) {
+		app.route("/operator", operatorRoutes(services.operator));
 	}
 
 	return app;

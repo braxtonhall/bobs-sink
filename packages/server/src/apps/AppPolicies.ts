@@ -1,46 +1,42 @@
-import { readFileSync } from "node:fs";
-import { z } from "zod";
-import { appPolicySchema, defaultImplicitPolicy, defaultRegisteredPolicy, type AppPolicy } from "./AppPolicy.js";
-import { isValidRpId } from "./rpId.js";
+import {
+	defaultImplicitPolicy,
+	defaultRegisteredPolicy,
+	type AppPolicy,
+	type AppPolicyOverrides,
+} from "./AppPolicy.js";
 
-const appsFileSchema = z.object({
-	/** Overrides for every registered app. */
-	registered: appPolicySchema.partial().optional(),
-	/** Overrides for apps that aren't listed. */
-	implicit: appPolicySchema.partial().optional(),
-	/** Registered apps by RP ID, each overriding the registered defaults. */
-	apps: z
-		.record(z.string().refine(isValidRpId, { message: "not a valid RP ID" }), appPolicySchema.partial())
-		.default({}),
-});
-export type AppsFile = z.input<typeof appsFileSchema>;
-
-/** Resolves the policy for any RP ID: registered apps from the apps file, everything else implicit. */
+/**
+ * Resolves the policy for any RP ID: registered apps get their overrides on the registered defaults, everything
+ * else is implicit. Held in memory because lookups are on the synchronous update path; `AppRegistry` keeps it in
+ * step with the database.
+ */
 export class AppPolicies {
-	private readonly registered: ReadonlyMap<string, AppPolicy>;
-	private readonly implicit: AppPolicy;
+	private readonly registered = new Map<string, AppPolicy>();
 
-	constructor(file: AppsFile = {}) {
-		const parsed = appsFileSchema.parse(file);
-		const registeredDefaults = { ...defaultRegisteredPolicy, ...parsed.registered };
-		this.implicit = { ...defaultImplicitPolicy, ...parsed.implicit };
-		this.registered = new Map(
-			Object.entries(parsed.apps).map(([rpId, overrides]) => [rpId, { ...registeredDefaults, ...overrides }]),
-		);
+	constructor(registered: Iterable<[string, AppPolicyOverrides]> = []) {
+		for (const [rpId, overrides] of registered) {
+			this.set(rpId, overrides);
+		}
 	}
 
-	static fromFile(path: string | undefined): AppPolicies {
-		if (path === undefined) {
-			return new AppPolicies();
-		}
-		return new AppPolicies(JSON.parse(readFileSync(path, "utf8")) as AppsFile);
+	static resolve(overrides: AppPolicyOverrides): AppPolicy {
+		return { ...defaultRegisteredPolicy, ...overrides };
 	}
 
 	get(rpId: string): AppPolicy {
-		return this.registered.get(rpId) ?? this.implicit;
+		return this.registered.get(rpId) ?? defaultImplicitPolicy;
 	}
 
 	isRegistered(rpId: string): boolean {
 		return this.registered.has(rpId);
+	}
+
+	/** Registers or updates an app; undefined makes it implicit again. */
+	set(rpId: string, overrides: AppPolicyOverrides | undefined): void {
+		if (overrides === undefined) {
+			this.registered.delete(rpId);
+		} else {
+			this.registered.set(rpId, AppPolicies.resolve(overrides));
+		}
 	}
 }

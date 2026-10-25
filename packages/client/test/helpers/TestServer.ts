@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AppPolicies, createLogger, createSink, type Config, type Sink } from "@bobs-sink/server";
+import { createLogger, createSink, type Config, type Sink } from "@bobs-sink/server";
 
 export const testApp = "example.com";
 export const testOrigin = `https://${testApp}`;
@@ -13,7 +13,6 @@ export class TestServer {
 	private constructor(
 		private sink: Sink,
 		private readonly config: Config,
-		private readonly policies: AppPolicies,
 		private readonly directory: string,
 		readonly baseUrl: string,
 	) {}
@@ -21,32 +20,29 @@ export class TestServer {
 	/** `jsonSchema` constrains the example app's documents, e.g. to provoke rejections. */
 	static async start(options: { jsonSchema?: Record<string, unknown> } = {}): Promise<TestServer> {
 		const directory = await mkdtemp(join(tmpdir(), "bobs-sink-client-"));
-		const policies = new AppPolicies({
-			apps: {
-				[testApp]: {
-					schema: { roots: testRoots, ...(options.jsonSchema === undefined ? {} : { jsonSchema: options.jsonSchema }) },
-				},
-			},
-		});
 		const config: Config = {
 			port: 0,
 			host: "127.0.0.1",
 			databasePath: join(directory, "sink.sqlite"),
-			appsFile: undefined,
 			trustProxy: false,
 			allowLocalhost: false,
 			adminToken,
 			logLevel: "silent",
+			operator: undefined,
 		};
-		const sink = createSink({ config, logger: createLogger("silent"), policies });
+		const sink = createSink({ config, logger: createLogger("silent") });
+		// Registered apps live in the database, so a restart keeps this.
+		sink.apps.register(testApp, {
+			schema: { roots: testRoots, ...(options.jsonSchema === undefined ? {} : { jsonSchema: options.jsonSchema }) },
+		});
 		const { port } = await sink.listen();
-		return new TestServer(sink, { ...config, port }, policies, directory, `http://127.0.0.1:${port}`);
+		return new TestServer(sink, { ...config, port }, directory, `http://127.0.0.1:${port}`);
 	}
 
 	/** Stops and starts the service on the same port and database, as a deploy would. */
 	async restart(): Promise<void> {
 		await this.sink.close();
-		this.sink = createSink({ config: this.config, logger: createLogger("silent"), policies: this.policies });
+		this.sink = createSink({ config: this.config, logger: createLogger("silent") });
 		await this.sink.listen();
 	}
 

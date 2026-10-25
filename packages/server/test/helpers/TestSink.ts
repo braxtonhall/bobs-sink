@@ -1,4 +1,4 @@
-import type { AppPolicies } from "../../src/apps/AppPolicies.js";
+import type { AppPolicyOverrides } from "../../src/apps/AppPolicy.js";
 import type { Config } from "../../src/config.js";
 import { createLogger } from "../../src/logger.js";
 import { createSink, type Sink } from "../../src/server.js";
@@ -9,15 +9,22 @@ import { TestDevice } from "./TestDevice.js";
 export const testApp = "example.com";
 export const testOrigin = "https://example.com";
 
-const testConfig: Config = {
+export const testConfig: Config = {
 	port: 0,
 	host: "127.0.0.1",
 	databasePath: ":memory:",
-	appsFile: undefined,
 	trustProxy: false,
 	allowLocalhost: false,
 	adminToken: "test-admin-token",
 	logLevel: "silent",
+	operator: undefined,
+};
+
+export type TestSinkOptions = {
+	/** Registered before the service starts listening. */
+	apps?: Record<string, AppPolicyOverrides>;
+	registry?: RegistrySettings;
+	config?: Partial<Config>;
 };
 
 export type CreatedDocument = { id: string; epoch: number; sizeBytes: number; visibility: string; lifecycle: string };
@@ -31,8 +38,15 @@ export class TestSink {
 		readonly baseUrl: string,
 	) {}
 
-	static async start(options: { policies?: AppPolicies; registry?: RegistrySettings } = {}): Promise<TestSink> {
-		const sink = createSink({ config: testConfig, logger: createLogger("silent"), ...options });
+	static async start(options: TestSinkOptions = {}): Promise<TestSink> {
+		const sink = createSink({
+			config: { ...testConfig, ...options.config },
+			logger: createLogger("silent"),
+			registry: options.registry,
+		});
+		for (const [rpId, overrides] of Object.entries(options.apps ?? {})) {
+			sink.apps.register(rpId, overrides);
+		}
 		const address = await sink.listen();
 		return new TestSink(sink, `http://127.0.0.1:${address.port}`);
 	}

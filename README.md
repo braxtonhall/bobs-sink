@@ -41,29 +41,33 @@ context, so sites must be served over https; `ALLOW_LOCALHOST=true` permits `htt
 ## Apps
 
 An app is a site, identified by its passkey RP ID (its domain). Any site can use the service without
-registering; unlisted RP IDs get tight default limits. Registered apps are listed in a JSON file named by
-`APPS_FILE`:
+registering; unregistered (implicit) RP IDs get tight default limits. Registered apps live in the database and
+are managed from the operator console. Each one overrides any of the registered defaults in
+[AppPolicy.ts](packages/server/src/apps/AppPolicy.ts):
 
 ```json
 {
-	"registered": { "maxDocumentBytes": 2097152 },
-	"implicit": { "maxDocumentsPerIdentity": 3 },
-	"apps": {
-		"example.com": {
-			"maxDocumentsPerIdentity": 5,
-			"schema": {
-				"roots": { "items": "map", "meta": "map" },
-				"jsonSchema": { "type": "object" }
-			}
-		}
+	"maxDocumentsPerIdentity": 5,
+	"schema": {
+		"roots": { "items": "map", "meta": "map" },
+		"jsonSchema": { "type": "object" }
 	}
 }
 ```
 
-Every field is optional. `registered` and `implicit` override the built-in defaults in
-[AppPolicy.ts](packages/server/src/apps/AppPolicy.ts). With a `schema`, updates may only create the declared roots,
-and `{ [root]: root.toJSON() }` must satisfy `jsonSchema`. Rebuilding a document into a new epoch requires
-declared roots.
+With a `schema`, updates may only create the declared roots, and `{ [root]: root.toJSON() }` must satisfy
+`jsonSchema` (compiled with strict Ajv, so unknown keywords are refused when saving). Rebuilding a document into a
+new epoch requires declared roots. Changing a schema doesn't re-check existing documents.
+
+Tests and scripts register apps without the console, through `sink.apps.register(rpId, overrides)`.
+
+## Operator console
+
+`/operator` lists every app the service has seen, with its identities, documents and storage, and has forms
+for registering, editing and unregistering apps. Operators sign in through bobs-server SSO; the service then
+checks the email against `OPERATOR_EMAILS`, at sign-in and on every request. The console is mounted only when
+all of `PUBLIC_URL`, `SSO_URL`, `SSO_EXCHANGE_URL`, `SSO_EXCHANGE_SECRET` and `OPERATOR_EMAILS` are set (see
+[.env.sample](.env.sample)), and `${PUBLIC_URL}/operator/callback` must be in bobs-server's `SSO_REDIRECTS`.
 
 ## API
 
@@ -87,6 +91,7 @@ string is defined in [signedMessages.ts](packages/protocol/src/signedMessages.ts
 | `GET /v1/documents/:id/epochs/:epoch`                    | signed        | An ended epoch's final Yjs snapshot                               |
 | `GET /v1/sync/:id`                                       | in-band       | WebSocket sync; see [sync.ts](packages/protocol/src/sync.ts)      |
 | `POST /admin/documents/:id/epochs`                       | `ADMIN_TOKEN` | Rebuild a document into a new epoch                               |
+| `/operator/*`                                            | operator      | The operator console (HTML pages)                                 |
 
 ## Client
 
@@ -99,12 +104,13 @@ packages/
   protocol/      wire protocol shared by server and client
   server/
     src/
-      apps/        app policies, the apps file, RP ID and origin rules
+      apps/        app policies and the registry, RP ID and origin rules
       db/          Drizzle schema (one file per table), connection, migrations
       documents/   persistence, validation, live documents, epochs
       identity/    passkey ceremonies, device keys, signed requests
       http/        Hono app, middleware, routes
       sync/        WebSocket sync sessions
+      operator/    the operator console: sessions, SSO client, pages
       lifecycle/   expiry of abandoned documents
       limits/      rate limiting
       server.ts    wires everything together

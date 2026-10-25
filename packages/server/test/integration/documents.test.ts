@@ -1,7 +1,6 @@
 import type { EpochArchiveResult } from "@bobs-sink/protocol";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { AppPolicies } from "../../src/apps/AppPolicies.js";
 import { toBase64Url } from "../../src/shared/base64url.js";
 import { json, testApp, TestSink } from "../helpers/TestSink.js";
 
@@ -10,11 +9,9 @@ describe("documents", () => {
 
 	beforeEach(async () => {
 		sink = await TestSink.start({
-			policies: new AppPolicies({
-				apps: {
-					[testApp]: { maxDocumentsPerIdentity: 2, maxDocumentBytes: 4096, schema: { roots: { items: "map" } } },
-				},
-			}),
+			apps: {
+				[testApp]: { maxDocumentsPerIdentity: 2, maxDocumentBytes: 4096, schema: { roots: { items: "map" } } },
+			},
 		});
 	});
 

@@ -42,7 +42,7 @@ export class LiveDocument {
 	constructor(
 		loaded: LoadedDocument,
 		private readonly persistence: DocumentPersistence,
-		private readonly rules: DocumentRules,
+		private rules: DocumentRules,
 		private readonly compaction: CompactionSettings,
 	) {
 		this.metadata = { ...loaded.metadata };
@@ -71,6 +71,11 @@ export class LiveDocument {
 	/** Everything the document has that a peer with `stateVector` is missing. */
 	diff(stateVector?: Uint8Array): Uint8Array {
 		return Y.encodeStateAsUpdate(this.doc, stateVector);
+	}
+
+	/** Checks later updates against new rules, after the app's policy changes. Existing content isn't re-checked. */
+	setRules(rules: DocumentRules): void {
+		this.rules = rules;
 	}
 
 	subscribe(subscriber: DocumentSubscriber): () => void {

@@ -22,6 +22,10 @@ export const appPolicySchema = z.object({
 });
 export type AppPolicy = z.infer<typeof appPolicySchema>;
 
+/** What an operator sets for a registered app; anything left out falls back to the registered defaults. */
+export const appPolicyOverridesSchema = appPolicySchema.partial();
+export type AppPolicyOverrides = z.infer<typeof appPolicyOverridesSchema>;
+
 export const defaultRegisteredPolicy: AppPolicy = {
 	maxDocumentBytes: 2 * 1024 * 1024,
 	maxDocumentsPerIdentity: 10,

@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { createAdaptorServer } from "@hono/node-server";
 import { WebSocketServer } from "ws";
-import { AppPolicies } from "./apps/AppPolicies.js";
+import { AppRegistry } from "./apps/AppRegistry.js";
 import type { Config } from "./config.js";
 import { openDatabase } from "./db/connection.js";
 import { migrateDatabase } from "./db/migrate.js";
@@ -18,6 +18,8 @@ import { PasskeyAssertionService } from "./identity/PasskeyAssertionService.js";
 import { PasskeyCeremonies } from "./identity/PasskeyCeremonies.js";
 import { RegistrationService } from "./identity/RegistrationService.js";
 import { RequestVerifier } from "./identity/RequestVerifier.js";
+import { OperatorSessions } from "./operator/OperatorSessions.js";
+import { SsoClient } from "./operator/SsoClient.js";
 import { DocumentExpiry } from "./lifecycle/DocumentExpiry.js";
 import { RateLimiter } from "./limits/RateLimiter.js";
 import type { Logger } from "./logger.js";
@@ -35,7 +37,6 @@ const defaultRegistrySettings: RegistrySettings = {
 export type SinkOptions = {
 	config: Config;
 	logger: Logger;
-	policies?: AppPolicies;
 	clock?: Clock;
 	registry?: RegistrySettings;
 };
@@ -47,16 +48,18 @@ export type Sink = {
 	close(): Promise<void>;
 	expiry: DocumentExpiry;
 	documents: DocumentService;
+	/** Registers and unregisters apps, as the operator console does. */
+	apps: AppRegistry;
 };
 
 /** Builds the whole service from its configuration. This is the only place dependencies are wired together. */
 export function createSink(options: SinkOptions): Sink {
 	const { config, logger } = options;
 	const clock = options.clock ?? systemClock;
-	const policies = options.policies ?? AppPolicies.fromFile(config.appsFile);
 
 	const db = openDatabase(config.databasePath);
 	migrateDatabase(db);
+	const policies = AppRegistry.loadPolicies(db);
 
 	const limiter = new RateLimiter(clock);
 	const rules = new DocumentRulesProvider(policies);
@@ -74,6 +77,8 @@ export function createSink(options: SinkOptions): Sink {
 		activeSessions.closeForDeviceKeys(keys);
 	});
 	const expiry = new DocumentExpiry(db, registry, clock);
+	const apps = new AppRegistry(db, policies, rules, registry, clock);
+	const operatorSessions = new OperatorSessions(db, clock);
 
 	const app = createHttpApp(
 		{
@@ -93,6 +98,16 @@ export function createSink(options: SinkOptions): Sink {
 				logger,
 			},
 			logger,
+			operator:
+				config.operator === undefined
+					? undefined
+					: {
+							apps,
+							sessions: operatorSessions,
+							sso: new SsoClient(config.operator),
+							config: config.operator,
+							logger,
+						},
 		},
 		{ trustProxy: config.trustProxy, adminToken: config.adminToken, maxBodyBytes: maxMessageBytes },
 	);
@@ -102,6 +117,7 @@ export function createSink(options: SinkOptions): Sink {
 
 	const maintenance = setInterval(() => {
 		limiter.sweep();
+		operatorSessions.deleteExpired();
 		const expired = expiry.run();
 		if (expired.documents > 0 || expired.archives > 0) {
 			logger.info(expired, "expired documents and archives");
@@ -112,6 +128,7 @@ export function createSink(options: SinkOptions): Sink {
 	return {
 		expiry,
 		documents,
+		apps,
 		listen: () =>
 			new Promise((resolve, reject) => {
 				server.once("error", reject);

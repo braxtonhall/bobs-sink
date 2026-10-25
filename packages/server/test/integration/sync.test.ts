@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { AppPolicies } from "../../src/apps/AppPolicies.js";
 import { closeCodes } from "@bobs-sink/protocol";
 import { waitFor } from "@bobs-sink/test-support";
 import { TestDevice } from "../helpers/TestDevice.js";
@@ -15,7 +14,7 @@ describe("sync", () => {
 
 	beforeEach(async () => {
 		sink = await TestSink.start({
-			policies: new AppPolicies({ apps: { [testApp]: { schema: { roots: { items: "map" } } } } }),
+			apps: { [testApp]: { schema: { roots: { items: "map" } } } },
 			registry: { compaction: { maxUpdates: 2, idleMs: 50 }, evictAfterMs: 50 },
 		});
 	});

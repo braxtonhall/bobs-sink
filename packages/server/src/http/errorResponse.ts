@@ -6,7 +6,7 @@ import type { Logger } from "../logger.js";
 import type { ErrorKind } from "@bobs-sink/protocol";
 import { SinkError } from "../shared/errors.js";
 
-const statusByKind: Record<ErrorKind, ContentfulStatusCode> = {
+export const statusByKind: Record<ErrorKind, ContentfulStatusCode> = {
 	bad_request: 400,
 	unauthorized: 401,
 	forbidden: 403,
