@@ -314,7 +314,7 @@ Build the `epoch` field into the format from day one. Routine (e.g. monthly) for
 - **Sessions:** a random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to `/operator`, stored hashed in an `operator_sessions` table with the email and an expiry (12 hours). Signing out deletes the row.
 - **CSRF:** every change is a form `POST`, which `SameSite=Lax` already keeps cross-site requests from carrying the cookie on; the server also requires the `Origin` header to match `PUBLIC_URL`.
 - **Login CSRF:** the SSO `state` is random, set in a short-lived cookie when sign-in starts, and must match on the callback.
-- **Configuration:** `PUBLIC_URL` (the service's own origin, e.g. `https://docs.bobs-server.net`, to build the callback URL), `SSO_URL` (`https://bobs-server.net/sso`), `SSO_EXCHANGE_URL` (internal, see §13), `SSO_EXCHANGE_SECRET` and `OPERATOR_EMAILS`. The console is mounted only when all are set; setting some but not all is a startup error.
+- **Configuration:** `PUBLIC_URL` (the service's own origin, e.g. `https://sink.bobs-server.net`, to build the callback URL), `SSO_URL` (`https://bobs-server.net/sso`), `SSO_EXCHANGE_URL` (internal, see §13), `SSO_EXCHANGE_SECRET` and `OPERATOR_EMAILS`. The console is mounted only when all are set; setting some but not all is a startup error.
 
 ---
 
@@ -335,7 +335,7 @@ The first user of this flow is the operator console (§12), ahead of managed acc
 
 **Implemented (bobs-server, see its `docs/sso.md`):**
 
-- `GET /sso?redirect=…&state=…` sits behind the existing `enforceLoggedIn`, so a signed-out visitor goes through `/login` and comes back via `next`. `redirect` must exactly match an entry in `SSO_REDIRECTS` (comma-separated callback URLs, e.g. `https://docs.bobs-server.net/operator/callback`); otherwise 400, never a redirect. `state` is required and length-bounded.
+- `GET /sso?redirect=…&state=…` sits behind the existing `enforceLoggedIn`, so a signed-out visitor goes through `/login` and comes back via `next`. `redirect` must exactly match an entry in `SSO_REDIRECTS` (comma-separated callback URLs, e.g. `https://sink.bobs-server.net/operator/callback`); otherwise 400, never a redirect. `state` is required and length-bounded.
 - The code is a `Token` row with type `sso`, a random 256-bit value, 60 s expiry, and a new nullable `redirect` column. The existing expired-token cleanup job removes stale ones.
 - `POST /api/sso/exchange` `{ code, redirect }` with `Authorization: Bearer <SSO_EXCHANGE_SECRET>` (compared in constant time). It consumes the code first (mark invalid where still valid and unexpired, in one statement), then checks `redirect`, so a code is never usable twice even when the check fails. Returns `{ sub, email }`.
 - SSO is off (both routes 404) unless `SSO_REDIRECTS` and `SSO_EXCHANGE_SECRET` are set.
@@ -350,11 +350,11 @@ Alternative to keep in mind: managed accounts as passkey identities I've granted
    - `GET /sso` — validate `redirect` against an allowlist, require login (reuse existing flow), issue a one-time code bound to `redirect`, redirect back with `code` + `state`.
    - `POST /sso/exchange` — internal only, requires the shared secret; consume code, check `redirect` matches, return `{ sub, email }`.
    - Storage: add `TokenType.SSO` to the existing `Token` table (store `redirect` alongside), or a small dedicated table.
-2. **Caddy + compose:** route `docs.bobs-server.net` to the new service; put both services on a shared internal network; block `/api/sso/exchange` from outside.
-   - Today bobs-server binds 80 and 443 itself and terminates TLS with certificate files mounted from the host. Caddy takes over both ports and the certificates (automatic HTTPS for `bobs-server.net`, `www.`, `api.` and `docs.`), and proxies to each container over the internal network.
+2. **Caddy + compose:** route `sink.bobs-server.net` to the new service; put both services on a shared internal network; block `/api/sso/exchange` from outside.
+   - Today bobs-server binds 80 and 443 itself and terminates TLS with certificate files mounted from the host. Caddy takes over both ports and the certificates (automatic HTTPS for `bobs-server.net`, `www.`, `api.` and `sink.`), and proxies to each container over the internal network.
    - bobs-server needs a mode for running behind a proxy: plain HTTP on one port, no certificate files, and Express `trust proxy` set, so `req.ip` (used by its login slow-down) is the visitor's address rather than Caddy's.
    - bobs-sink runs with `TRUST_PROXY=true`, a volume for its database, and its own `.env` (`ADMIN_TOKEN`, the SSO and operator settings from §12).
-   - DNS: a `docs.bobs-server.net` record (CNAME to `bobs-server.net`, like `api.` and `www.`).
+   - DNS: a `sink.bobs-server.net` record (CNAME to `bobs-server.net`, like `api.` and `www.`).
    - Deploys: bobs-server's workflow rebuilds only the `server` service; bobs-sink gets its own, or is rebuilt by hand at first.
    - **Implemented** in bobs-server: proxy mode (no certificate paths → plain HTTP; `TRUST_PROXY`), a `caddy` service and `Caddyfile`, a `sink` service built from the bobs-sink GitHub repo with `sink.env`, and the rollout steps in its `docs/server-setup.md`.
 3. **No rewrite yet.** Later, extract auth into its own service once the docs service has shaped its API; peel off other parts of bobs-server only when there's a reason to touch them. Keep it to three or four services total.
@@ -379,7 +379,7 @@ Alternative to keep in mind: managed accounts as passkey identities I've granted
 **Phase 2b — operating it** (planned, next)
 
 - bobs-server: SSO endpoints, a mode for running behind a proxy (§13, §14)
-- Deployment: Caddy in front of both services, `docs.bobs-server.net` (§14)
+- Deployment: Caddy in front of both services, `sink.bobs-server.net` (§14)
 - bobs-sink: operator console with apps in the database, operator whitelist via SSO (§12); then register findcalvinandhobbes.com from it
 
 **Phase 3 — first site integration**
