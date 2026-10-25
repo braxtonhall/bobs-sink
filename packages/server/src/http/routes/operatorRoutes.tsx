@@ -48,7 +48,8 @@ export function operatorRoutes(services: OperatorRouteServices) {
 			"content-security-policy",
 			"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 		);
-		c.header("referrer-policy", "no-referrer");
+		// Not "no-referrer": under it, browsers send `Origin: null` on form posts, which requireSameOrigin refuses.
+		c.header("referrer-policy", "same-origin");
 		c.header("cache-control", "no-store");
 	});
 	app.use(requireSameOrigin(config.publicUrl));
