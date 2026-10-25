@@ -3,8 +3,24 @@
 	"version": "0.1.0",
 	"description": "Browser client for bobs-sink: passkey identity, device keys, and Yjs sync",
 	"license": "MIT",
+	"keywords": [
+		"bobs-sink",
+		"yjs",
+		"crdt",
+		"passkeys",
+		"sync"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/braxtonhall/bobs-sink.git",
+		"directory": "packages/client"
+	},
+	"homepage": "https://github.com/braxtonhall/bobs-sink/tree/main/packages/client#readme",
+	"bugs": "https://github.com/braxtonhall/bobs-sink/issues",
 	"type": "module",
 	"sideEffects": false,
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"source": "./src/index.ts",
@@ -13,10 +29,12 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"src"
 	],
 	"scripts": {
-		"typecheck": "tsc --noEmit && tsc --noEmit -p test"
+		"typecheck": "tsc --noEmit && tsc --noEmit -p test",
+		"prepublishOnly": "tsc -b tsconfig.build.json --clean && tsc -b tsconfig.build.json"
 	},
 	"dependencies": {
 		"@bobs-sink/protocol": "0.1.0",
@@ -33,5 +51,9 @@
 		"@bobs-sink/test-support": "0.1.0",
 		"fake-indexeddb": "^6.2.6",
 		"yjs": "^13.6.33"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
 	}
 }

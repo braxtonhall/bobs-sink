@@ -3,8 +3,22 @@
 	"version": "0.1.0",
 	"description": "Wire protocol shared by the bobs-sink server and client",
 	"license": "MIT",
+	"keywords": [
+		"bobs-sink",
+		"yjs",
+		"crdt"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/braxtonhall/bobs-sink.git",
+		"directory": "packages/protocol"
+	},
+	"homepage": "https://github.com/braxtonhall/bobs-sink/tree/main/packages/protocol#readme",
+	"bugs": "https://github.com/braxtonhall/bobs-sink/issues",
 	"type": "module",
 	"sideEffects": false,
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
 			"source": "./src/index.ts",
@@ -13,9 +27,15 @@
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"src"
 	],
 	"scripts": {
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"prepublishOnly": "tsc -b tsconfig.build.json --clean && tsc -b tsconfig.build.json"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
 	}
 }
