@@ -2,7 +2,7 @@
 
 A small, self-hostable CRDT document service. It starts as anonymous cloud saves for my websites and grows into a general managed document service for people I know.
 
-Status: Phases 1 (the service, `packages/server`) and 2 (the client library, `packages/client`) are implemented in this repo. Once both are merged, the first site integration (findcalvinandhobbes.com) is designed separately. Notes marked **Implemented:** record decisions made while building.
+Status: Phases 1 (the service, `packages/server`) and 2 (the client library, `packages/client`) are implemented in this repo. Next is the operator console (§12, registering apps from a page instead of the apps file, with operators signed in through bobs-server SSO, §13), together with the bobs-server SSO endpoints and the deployment (§14). After that, the first site integration (findcalvinandhobbes.com) is designed separately. Notes marked **Implemented:** record decisions made while building; notes marked **Planned:** are designed but not built.
 
 ---
 
@@ -291,11 +291,38 @@ Build the `epoch` field into the format from day one. Routine (e.g. monthly) for
 - Fork users get their own passkeys and data (passkeys are domain-bound). Related Origin Requests don't scale to arbitrary forks.
 - Public-read documents can still be read from any site, so cross-fork sharing of public documents is possible.
 
+### Registering apps: the operator console
+
+**Planned.** Today registered apps are listed in a JSON file (`APPS_FILE`) read at startup. They move into the database and are managed from a small server-rendered page on the service, so registering `findcalvinandhobbes.com` doesn't need a file edit and a restart.
+
+- **Storage:** the `apps` table (today: every RP ID the service has seen) gains a nullable `policy` column holding the app's overrides (the same shape as one entry of the apps file: limits and `schema`) and `registeredAt` / `updatedAt`. A row with a policy is registered; without one it is implicit. Registering an RP ID the service hasn't seen yet inserts the row.
+- **Defaults:** the registered and implicit defaults stay in code (`AppPolicy.ts`). `APPS_FILE` is removed rather than kept beside the database, so there is one source of truth.
+- **Resolution:** `AppPolicies` loads every registered app at startup into memory (policy lookups are on the synchronous update path) and is updated in place when the operator saves. Saving also drops the app's cached `DocumentRules`, and live documents of that app swap to the new rules (a `LiveDocument` captures its rules when it loads, so without this they'd keep the old ones until evicted).
+- **Validation on save:** the policy is parsed with the existing zod schema, and its JSON Schema is compiled with the same strict Ajv the rules use, so a bad schema is refused at the form rather than failing at the next update.
+- **Changing a schema doesn't re-check existing documents.** Tightening it can leave a document that rejects every update until it's fixed. The page warns when the app has documents.
+- **Unregistering** clears the policy; the app falls back to the implicit defaults. Existing documents are kept, even above the implicit limits.
+- **Page:** `/operator` lists apps (registered first, then implicit ones the service has seen, with document counts and storage). Each app has a form for its limits (blank means default) and a JSON field for `schema` (`roots` and `jsonSchema`). Registering takes an RP ID plus the same form.
+- **Tests and the demo** register apps without the page: `Sink` exposes the app registry (`sink.apps.register(rpId, policy)`), and the demo's dev script registers `localhost` in its database before starting the service.
+- The admin token route (`POST /admin/documents/:id/epochs`) stays. Moving it onto the page is a later convenience.
+
+### Operators
+
+**Planned.** Only operators can open the console. For now that's me: `OPERATOR_EMAILS` is a comma-separated list of email addresses (compared case-insensitively), set in the service's environment.
+
+- Operators sign in through bobs-server SSO (§13), which proves the email address; bobs-sink checks it against `OPERATOR_EMAILS`. bobs-server only says who the person is; the whitelist lives here.
+- The whitelist is checked at sign-in and again on every request, so removing an address takes effect immediately.
+- **Sessions:** a random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie scoped to `/operator`, stored hashed in an `operator_sessions` table with the email and an expiry (12 hours). Signing out deletes the row.
+- **CSRF:** every change is a form `POST`, which `SameSite=Lax` already keeps cross-site requests from carrying the cookie on; the server also requires the `Origin` header to match `PUBLIC_URL`.
+- **Login CSRF:** the SSO `state` is random, set in a short-lived cookie when sign-in starts, and must match on the callback.
+- **Configuration:** `PUBLIC_URL` (the service's own origin, e.g. `https://docs.bobs-server.net`, to build the callback URL), `SSO_URL` (`https://bobs-server.net/sso`), `SSO_EXCHANGE_URL` (internal, see §13), `SSO_EXCHANGE_SECRET` and `OPERATOR_EMAILS`. The console is mounted only when all are set; setting some but not all is a startup error.
+
 ---
 
 ## 13. Managed accounts: login via bobs-server SSO
 
 bobs-server today: email one-time link / password → HS256 JWT in a host-scoped `access_token` cookie, refresh tokens in the DB. Don't share `JWT_SECRET` with the new service.
+
+The first user of this flow is the operator console (§12), ahead of managed accounts: bobs-sink only needs `{ sub, email }` to check the operator whitelist. Managed accounts reuse it later.
 
 **Flow:**
 
@@ -304,7 +331,14 @@ bobs-server today: email one-time link / password → HS256 JWT in a host-scoped
 3. docs service verifies `state`, then exchanges `code` server-to-server for `{ sub, email }`, sending the same `redirect`. bobs-server rejects the exchange if `redirect` doesn't match.
 4. docs service creates its own session, keyed to bobs-server `Email.id`.
 
-**Exchange transport:** the two services talk over the internal Docker network (e.g. `http://bobs-server:<port>/sso/exchange`), not `localhost`. The exchange endpoint requires a shared secret (`SSO_EXCHANGE_SECRET` in both services' env), and Caddy also blocks `/sso/exchange` from outside. Either control alone should be enough to stop external callers.
+**Exchange transport:** the two services talk over the internal Docker network (e.g. `http://server/api/sso/exchange`), not `localhost`. The exchange endpoint requires a shared secret (`SSO_EXCHANGE_SECRET` in both services' env), and Caddy also blocks it from outside. Either control alone should be enough to stop external callers. It lives under `/api` because bobs-server's plain-HTTP listener redirects everything else to https.
+
+**Implemented (bobs-server, see its `docs/sso.md`):**
+
+- `GET /sso?redirect=…&state=…` sits behind the existing `enforceLoggedIn`, so a signed-out visitor goes through `/login` and comes back via `next`. `redirect` must exactly match an entry in `SSO_REDIRECTS` (comma-separated callback URLs, e.g. `https://docs.bobs-server.net/operator/callback`); otherwise 400, never a redirect. `state` is required and length-bounded.
+- The code is a `Token` row with type `sso`, a random 256-bit value, 60 s expiry, and a new nullable `redirect` column. The existing expired-token cleanup job removes stale ones.
+- `POST /api/sso/exchange` `{ code, redirect }` with `Authorization: Bearer <SSO_EXCHANGE_SECRET>` (compared in constant time). It consumes the code first (mark invalid where still valid and unexpired, in one statement), then checks `redirect`, so a code is never usable twice even when the check fails. Returns `{ sub, email }`.
+- SSO is off (both routes 404) unless `SSO_REDIRECTS` and `SSO_EXCHANGE_SECRET` are set.
 
 Alternative to keep in mind: managed accounts as passkey identities I've granted via invite link, with bobs-server login only for attaching email or recovery.
 
@@ -316,7 +350,13 @@ Alternative to keep in mind: managed accounts as passkey identities I've granted
    - `GET /sso` — validate `redirect` against an allowlist, require login (reuse existing flow), issue a one-time code bound to `redirect`, redirect back with `code` + `state`.
    - `POST /sso/exchange` — internal only, requires the shared secret; consume code, check `redirect` matches, return `{ sub, email }`.
    - Storage: add `TokenType.SSO` to the existing `Token` table (store `redirect` alongside), or a small dedicated table.
-2. **Caddy + compose:** route `docs.bobs-server.net` to the new service; put both services on a shared internal network; block `/sso/exchange` from outside.
+2. **Caddy + compose:** route `docs.bobs-server.net` to the new service; put both services on a shared internal network; block `/api/sso/exchange` from outside.
+   - Today bobs-server binds 80 and 443 itself and terminates TLS with certificate files mounted from the host. Caddy takes over both ports and the certificates (automatic HTTPS for `bobs-server.net`, `www.`, `api.` and `docs.`), and proxies to each container over the internal network.
+   - bobs-server needs a mode for running behind a proxy: plain HTTP on one port, no certificate files, and Express `trust proxy` set, so `req.ip` (used by its login slow-down) is the visitor's address rather than Caddy's.
+   - bobs-sink runs with `TRUST_PROXY=true`, a volume for its database, and its own `.env` (`ADMIN_TOKEN`, the SSO and operator settings from §12).
+   - DNS: a `docs.bobs-server.net` record (CNAME to `bobs-server.net`, like `api.` and `www.`).
+   - Deploys: bobs-server's workflow rebuilds only the `server` service; bobs-sink gets its own, or is rebuilt by hand at first.
+   - **Implemented** in bobs-server: proxy mode (no certificate paths → plain HTTP; `TRUST_PROXY`), a `caddy` service and `Caddyfile`, a `sink` service built from the bobs-sink GitHub repo with `sink.env`, and the rollout steps in its `docs/server-setup.md`.
 3. **No rewrite yet.** Later, extract auth into its own service once the docs service has shaped its API; peel off other parts of bobs-server only when there's a reason to touch them. Keep it to three or four services total.
 
 ---
@@ -336,6 +376,12 @@ Alternative to keep in mind: managed accounts as passkey identities I've granted
 - Yjs provider + local persistence
 - Sign-in result handling, merge / discard / keep-separate, epoch rebuild flow
 
+**Phase 2b — operating it** (planned, next)
+
+- bobs-server: SSO endpoints, a mode for running behind a proxy (§13, §14)
+- Deployment: Caddy in front of both services, `docs.bobs-server.net` (§14)
+- bobs-sink: operator console with apps in the database, operator whitelist via SSO (§12); then register findcalvinandhobbes.com from it
+
 **Phase 3 — first site integration**
 
 - Design findcalvinandhobbes cloud saves (UX, schema, merge rules) once Phases 1–2 are merged.
@@ -346,7 +392,7 @@ Alternative to keep in mind: managed accounts as passkey identities I've granted
 
 **Phase 5 — managed side**
 
-- bobs-server SSO, accounts, pinned documents, permissions UI, schemas per document, claiming
+- Accounts (on the SSO from Phase 2b), pinned documents, permissions UI, schemas per document, claiming
 
 **Phase 6 — extras**
 
