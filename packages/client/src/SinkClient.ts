@@ -60,16 +60,32 @@ export type SinkClientEvents = {
 	error: unknown;
 };
 
+export type SignInOptions = {
+	/**
+	 * What to do when the working copy doesn't belong to any of the identity's documents. "merge", the default,
+	 * merges it into the most recently used document, or creates the first one from it. "choose" leaves it
+	 * detached so the site can pick `createDocumentFromLocal`, `mergeLocalInto` or `useRemote`.
+	 */
+	unmatched?: "merge" | "choose";
+	/** For "merge": picks a side for keys both copies have. Defaults to the remote one. */
+	resolve?: ConflictResolver;
+};
+
 export type SignInOutcome = {
 	identityId: string;
-	/** The identity's documents for this app. */
+	/** The identity's documents for this app, including one created by signing in. */
 	documents: DocumentInfo[];
 	/**
-	 * Whether the working copy already belonged to one of `documents` and resumed syncing with it. Otherwise
-	 * pick one of: `createDocumentFromLocal`, `mergeLocalInto`, or `useRemote`.
+	 * What happened to the working copy: "resumed" when it already belonged to one of `documents` and syncs
+	 * with it again, "merged" or "created" for `unmatched: "merge"`, and "detached" for `unmatched: "choose"`.
 	 */
-	resumed: boolean;
+	result: "resumed" | "merged" | "created" | "detached";
 };
+
+/** Sets up whatever uses a working copy; returns how to tear it down. */
+export type DocSetup = (doc: Y.Doc) => (() => void) | undefined;
+
+type DocBinding = { setup: DocSetup; teardown: (() => void) | undefined };
 
 type Account = { identityId: string; key: DeviceKey };
 
@@ -97,6 +113,7 @@ export class SinkClient {
 	private provider: SyncProvider | undefined;
 	private syncStatus: ClientSyncStatus = "local";
 	private needsSignIn = false;
+	private readonly docBindings = new Set<DocBinding>();
 
 	private constructor(
 		private readonly settings: Settings,
@@ -133,7 +150,7 @@ export class SinkClient {
 		return client;
 	}
 
-	/** The working copy. It is replaced in some flows; listen for "doc". */
+	/** The working copy. It is replaced in some flows; use `bind` or `observe`, or listen for "doc". */
 	get doc(): Y.Doc {
 		return this.replica.doc;
 	}
@@ -160,6 +177,34 @@ export class SinkClient {
 	}
 
 	/**
+	 * Runs `setup` with the working copy now and again with each one that replaces it, tearing down the previous
+	 * setup first, while the old doc still works. Returns a function that tears down and stops.
+	 */
+	bind(setup: DocSetup): () => void {
+		const binding: DocBinding = { setup, teardown: setup(this.doc) };
+		this.docBindings.add(binding);
+		return () => {
+			if (this.docBindings.delete(binding)) {
+				binding.teardown?.();
+			}
+		};
+	}
+
+	/** Calls `listener` with the working copy now, after each change to it, and whenever it's replaced. */
+	observe(listener: (doc: Y.Doc) => void): () => void {
+		return this.bind((doc) => {
+			const onUpdate = () => {
+				listener(doc);
+			};
+			doc.on("update", onUpdate);
+			listener(doc);
+			return () => {
+				doc.off("update", onUpdate);
+			};
+		});
+	}
+
+	/**
 	 * Turns on cloud saves: registers a passkey for a new identity, authorizes this device, and creates the
 	 * identity's first document from the working copy, so nothing done before is lost.
 	 */
@@ -180,9 +225,9 @@ export class SinkClient {
 
 	/**
 	 * Signs in with an existing passkey and authorizes this device. If the working copy belongs to one of the
-	 * identity's documents it resumes syncing; otherwise the site chooses what to do with it (see SignInOutcome).
+	 * identity's documents it resumes syncing; otherwise `options.unmatched` says what to do with it.
 	 */
-	signIn(): Promise<SignInOutcome> {
+	signIn(options: SignInOptions = {}): Promise<SignInOutcome> {
 		return this.tasks.run(async () => {
 			const { api, passkeys } = this.settings;
 			const key = await DeviceKey.generate();
@@ -194,14 +239,22 @@ export class SinkClient {
 				// The old key is likely already revoked or lost; this only tidies up if it isn't.
 				void api.signOut(previous.key).catch(() => undefined);
 			}
+			const { identityId, documents } = result;
 			const bound = this.binding;
-			const resumed = bound !== undefined && result.documents.some((document) => document.id === bound.documentId);
-			if (resumed) {
+			if (bound !== undefined && documents.some((document) => document.id === bound.documentId)) {
 				this.startSync();
-			} else {
-				await this.detach();
+				return { identityId, documents, result: "resumed" };
 			}
-			return { identityId: result.identityId, documents: result.documents, resumed };
+			await this.detach();
+			if (options.unmatched === "choose") {
+				return { identityId, documents, result: "detached" };
+			}
+			const latest = mostRecentlyUsed(documents);
+			if (latest === undefined) {
+				return { identityId, documents: [await this.createFromLocal()], result: "created" };
+			}
+			await this.mergeInto(latest, options.resolve);
+			return { identityId, documents, result: "merged" };
 		});
 	}
 
@@ -224,11 +277,7 @@ export class SinkClient {
 				this.startSync();
 				return;
 			}
-			const local = this.replica.doc;
-			const { epoch } = await this.findDocument(documentId);
-			await this.switchTo({ documentId, epoch }, (doc) => {
-				mergeDocuments(local, doc, this.settings.roots, resolve);
-			});
+			await this.mergeInto(await this.findDocument(documentId), resolve);
 		});
 	}
 
@@ -277,10 +326,14 @@ export class SinkClient {
 		});
 	}
 
-	/** Stops syncing and releases the working copy. The client can't be used afterwards. */
+	/** Stops syncing, tears down bindings and releases the working copy. The client can't be used afterwards. */
 	close(): Promise<void> {
 		return this.tasks.run(async () => {
 			this.stopSync();
+			for (const binding of this.docBindings) {
+				binding.teardown?.();
+			}
+			this.docBindings.clear();
 			await this.replica.close();
 			this.state.close();
 		});
@@ -293,6 +346,13 @@ export class SinkClient {
 		await this.setBinding({ documentId: created.id, epoch: created.epoch });
 		this.startSync();
 		return created;
+	}
+
+	private async mergeInto(document: DocumentInfo, resolve: ConflictResolver | undefined): Promise<void> {
+		const local = this.replica.doc;
+		await this.switchTo({ documentId: document.id, epoch: document.epoch }, (doc) => {
+			mergeDocuments(local, doc, this.settings.roots, resolve);
+		});
 	}
 
 	private async findDocument(documentId: string): Promise<DocumentInfo> {
@@ -333,8 +393,26 @@ export class SinkClient {
 		const previous = this.replica;
 		this.replica = next;
 		await this.state.save("replica", next.name);
+		for (const binding of this.docBindings) {
+			this.guard(() => binding.teardown?.());
+			binding.teardown = undefined;
+		}
 		previous.discard();
 		this.events.emit("doc", next.doc);
+		for (const binding of this.docBindings) {
+			this.guard(() => {
+				binding.teardown = binding.setup(next.doc);
+			});
+		}
+	}
+
+	/** Runs site code during a replacement, reporting a throw as "error" so one binding can't stop the rest. */
+	private guard(run: () => void): void {
+		try {
+			run();
+		} catch (error) {
+			this.events.emit("error", error);
+		}
 	}
 
 	private startSync(): void {
@@ -483,6 +561,14 @@ export class SinkClient {
 		}
 		return this.binding;
 	}
+}
+
+function mostRecentlyUsed(documents: DocumentInfo[]): DocumentInfo | undefined {
+	return documents.reduce<DocumentInfo | undefined>(
+		(latest, document) =>
+			latest === undefined || Date.parse(document.lastUsedAt) > Date.parse(latest.lastUsedAt) ? document : latest,
+		undefined,
+	);
 }
 
 /** Asks the browser not to evict this site's storage, where supported. Device keys live there. */

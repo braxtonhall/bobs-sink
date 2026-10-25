@@ -60,9 +60,10 @@ export function renderAccount(container: HTMLElement, sink: SinkClient, actions:
 }
 
 async function signIn(sink: SinkClient): Promise<string> {
-	const outcome = await sink.signIn();
+	// The demo shows every choice; a site can leave this out to merge into the identity's document.
+	const outcome = await sink.signIn({ unmatched: "choose" });
 	const count = `${outcome.documents.length} document${outcome.documents.length === 1 ? "" : "s"}`;
-	return outcome.resumed ? `resumed syncing (${count})` : `signed in; ${count}, choose what to do below`;
+	return outcome.result === "resumed" ? `resumed syncing (${count})` : `signed in; ${count}, choose what to do below`;
 }
 
 /** Signed in, but the working copy isn't attached to a document: what to do with local data. */

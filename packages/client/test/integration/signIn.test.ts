@@ -41,10 +41,30 @@ describe("signing in on another device", () => {
 		await server.stop();
 	});
 
+	it("merges local data into the identity's document by default", async () => {
+		const phone = await phoneWithLocalData({ phone: 2, shared: "phone" });
+
+		const outcome = await phone.signIn();
+
+		expect(outcome.result).toBe("merged");
+		const expected = { laptop: 1, phone: 2, shared: "laptop" };
+		expect(items(phone)).toEqual(expected);
+		await expect.poll(() => items(laptopClient)).toEqual(expected);
+		expect(phone.document).toEqual({ documentId, epoch: 0 });
+	});
+
+	it("merges by default with an app-supplied conflict resolver", async () => {
+		const phone = await phoneWithLocalData({ shared: "phone" });
+
+		await phone.signIn({ resolve: () => "local" });
+
+		await waitFor(() => items(laptopClient)["shared"] === "phone");
+	});
+
 	it("merges local data into a remote document, keeping remote values by default", async () => {
 		const phone = await phoneWithLocalData({ phone: 2, shared: "phone" });
 
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await phone.mergeLocalInto(documentId);
 
 		const expected = { laptop: 1, phone: 2, shared: "laptop" };
@@ -56,7 +76,7 @@ describe("signing in on another device", () => {
 	it("merges with an app-supplied conflict resolver", async () => {
 		const phone = await phoneWithLocalData({ shared: "phone" });
 
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await phone.mergeLocalInto(documentId, (conflict) => (conflict.local === "phone" ? "local" : "remote"));
 
 		await waitFor(() => items(laptopClient)["shared"] === "phone");
@@ -65,7 +85,7 @@ describe("signing in on another device", () => {
 	it("can keep local data as a separate document", async () => {
 		const phone = await phoneWithLocalData({ phone: 2 });
 
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		const created = await phone.createDocumentFromLocal();
 		await waitFor(() => phone.sync === "synced");
 
@@ -82,7 +102,7 @@ describe("signing in on another device", () => {
 		const replaced: unknown[] = [];
 		phone.on("doc", (doc) => replaced.push(doc));
 
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await phone.useRemote(documentId);
 
 		expect(replaced).toEqual([phone.doc]);
@@ -91,7 +111,7 @@ describe("signing in on another device", () => {
 
 	it("asks for sign-in once a device key is revoked, then resumes with edits made meanwhile", async () => {
 		const phone = await openOn(new TestDevice(server, laptop.passkey));
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await phone.useRemote(documentId);
 		const identities: string[] = [];
 		laptopClient.on("identity", (status) => identities.push(status.kind));
@@ -103,14 +123,14 @@ describe("signing in on another device", () => {
 
 		const outcome = await laptopClient.signIn();
 
-		expect(outcome.resumed).toBe(true);
+		expect(outcome.result).toBe("resumed");
 		expect(identities).toEqual(["needs-sign-in", "signed-in"]);
 		await waitFor(() => items(phone)["whileSignedOut"] === 1);
 	});
 
 	it("needs sign-in after a reload once its key has been revoked", async () => {
 		const phone = await openOn(new TestDevice(server, laptop.passkey));
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await laptopClient.close();
 		open.splice(open.indexOf(laptopClient), 1);
 		await phone.revokeOtherDevices();

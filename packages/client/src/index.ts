@@ -6,7 +6,9 @@ export { browserPasskeys, type PasskeyAuthenticator } from "./identity/Passkeys.
 export {
 	SinkClient,
 	type ClientSyncStatus,
+	type DocSetup,
 	type IdentityStatus,
+	type SignInOptions,
 	type SignInOutcome,
 	type SinkClientEvents,
 	type SinkClientOptions,

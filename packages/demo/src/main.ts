@@ -1,5 +1,4 @@
 import { SinkClient } from "@bobs-sink/client";
-import type * as Y from "yjs";
 import { byId } from "./dom.js";
 import { EventLog } from "./EventLog.js";
 import "./style.css";
@@ -37,10 +36,8 @@ function renderAll(): void {
 	renderAccount(accountContainer, sink, actions, log);
 }
 
-let unbindDoc = bindDoc(sink.doc);
-
-/** Shows `doc` in the items and notes views; returns a function that stops. */
-function bindDoc(doc: Y.Doc): () => void {
+// Shows the working copy in the items and notes views, re-binding whenever it's replaced.
+sink.bind((doc) => {
 	const unbindItems = bindItems(byId("items", HTMLUListElement), byId("add-item", HTMLFormElement), doc);
 	const unbindNotes = bindNotes(byId("notes", HTMLTextAreaElement), doc.getText("notes"));
 	const onUpdate = () => {
@@ -52,11 +49,9 @@ function bindDoc(doc: Y.Doc): () => void {
 		unbindNotes();
 		doc.off("update", onUpdate);
 	};
-}
+});
 
-sink.on("doc", (doc) => {
-	unbindDoc();
-	unbindDoc = bindDoc(doc);
+sink.on("doc", () => {
 	log.add("working doc replaced");
 	renderAll();
 });

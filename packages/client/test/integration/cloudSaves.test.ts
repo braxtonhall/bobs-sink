@@ -46,8 +46,8 @@ describe("cloud saves", () => {
 		client.doc.getMap("items").set("after", 2);
 
 		const phone = await openOn(new TestDevice(server, laptop.passkey));
-		const outcome = await phone.signIn();
-		expect(outcome).toMatchObject({ resumed: false, documents: [{ id: created.id }] });
+		const outcome = await phone.signIn({ unmatched: "choose" });
+		expect(outcome).toMatchObject({ result: "detached", documents: [{ id: created.id }] });
 		await phone.useRemote(created.id);
 
 		expect(items(phone)).toEqual({ before: 1, after: 2 });
@@ -67,7 +67,7 @@ describe("cloud saves", () => {
 		await waitFor(() => reloaded.sync === "synced");
 
 		const other = await openOn(new TestDevice(server, device.passkey));
-		await other.signIn();
+		await other.signIn({ unmatched: "choose" });
 		await other.useRemote(created.id);
 		await waitFor(() => items(other)["afterReload"] === true);
 		expect(reloaded.document).toEqual({ documentId: created.id, epoch: 0 });
@@ -79,7 +79,7 @@ describe("cloud saves", () => {
 		const created = await client.enableCloudSaves();
 		await waitFor(() => client.sync === "synced");
 		const phone = await openOn(new TestDevice(server, laptop.passkey));
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await phone.useRemote(created.id);
 
 		laptop.network.goOffline();
@@ -104,7 +104,7 @@ describe("cloud saves", () => {
 		client.doc.getMap("items").set("afterRestart", 1);
 
 		const other = await openOn(new TestDevice(server, device.passkey));
-		const { documents } = await other.signIn();
+		const { documents } = await other.signIn({ unmatched: "choose" });
 		await other.useRemote(documents[0]?.id ?? "");
 		await waitFor(() => items(other)["afterRestart"] === 1);
 	});

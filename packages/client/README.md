@@ -12,9 +12,9 @@ const sink = await SinkClient.open({
 	roots: { items: "map", meta: "map" },
 });
 
-render(sink.doc);
-// Some flows replace the working doc (rebuilds, rejections, sign-in choices); always use the latest one.
-sink.on("doc", (doc) => render(doc));
+// Some flows replace the working doc (rebuilds, rejections, sign-in, sign-out). observe and bind follow it, so
+// there's no need to track which doc is current.
+sink.observe((doc) => render(doc.getMap("items").toJSON())); // now, after every change, and on replacement
 sink.on("sync", (status) => showSyncStatus(status)); // local | connecting | synced | offline | stopped
 sink.on("identity", (status) => {
 	if (status.kind === "needs-sign-in") {
@@ -25,15 +25,29 @@ sink.on("identity", (status) => {
 // "Turn on cloud saves": registers a passkey and uploads what's there so far.
 await sink.enableCloudSaves();
 
-// On another device:
-const { documents, resumed } = await sink.signIn();
-if (!resumed) {
-	if (documents.length === 0) {
-		await sink.createDocumentFromLocal();
-	} else {
-		// Or: sink.useRemote(id) to discard local data, or createDocumentFromLocal() to keep it separately.
-		await sink.mergeLocalInto(documents[0].id, ({ local, remote }) => pickNewer(local, remote));
-	}
+// On another device: signs in and merges local data into the identity's most recently used document (or
+// uploads it, if there's none). Keys both copies have keep the remote value unless `resolve` says otherwise.
+await sink.signIn();
+```
+
+For things that hold onto a Yjs type, such as an editor binding, `bind` sets them up with each working doc and
+tears them down before it's replaced:
+
+```ts
+sink.bind((doc) => {
+	const binding = new ProsemirrorBinding(doc.getXmlFragment("body"), view);
+	return () => binding.destroy();
+});
+```
+
+To decide what happens to local data at sign-in yourself, pass `unmatched: "choose"`:
+
+```ts
+const { documents, result } = await sink.signIn({ unmatched: "choose" });
+if (result === "detached") {
+	// One of: createDocumentFromLocal() to keep it separately, useRemote(id) to discard it, or
+	// mergeLocalInto(id, resolve?).
+	await sink.mergeLocalInto(documents[0].id, ({ local, remote }) => pickNewer(local, remote));
 }
 ```
 

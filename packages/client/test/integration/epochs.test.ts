@@ -32,7 +32,7 @@ describe("epoch rebuilds", () => {
 		documentId = (await laptopClient.enableCloudSaves()).id;
 		await waitFor(() => laptopClient.sync === "synced");
 		phone = await openOn(new TestDevice(server, laptop.passkey));
-		await phone.signIn();
+		await phone.signIn({ unmatched: "choose" });
 		await phone.useRemote(documentId);
 	});
 
