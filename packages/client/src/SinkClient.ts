@@ -262,6 +262,41 @@ export class SinkClient {
 		return this.tasks.run(() => this.settings.api.listDocuments(this.requireAccount().key));
 	}
 
+	/**
+	 * A copy of one of the identity's documents as the service has it, e.g. to show what each holds before
+	 * picking one. Nothing is kept locally, edits to it go nowhere, and the working copy is untouched.
+	 */
+	readDocument(documentId: string): Promise<Y.Doc> {
+		return this.tasks.run(async () => {
+			const account = this.requireAccount();
+			const { epoch } = await this.findDocument(documentId);
+			const doc = new Y.Doc();
+			const { api, WebSocket, reconnect, batchMs } = this.settings;
+			const provider = new SyncProvider(
+				{
+					url: api.syncUrl(documentId),
+					documentId,
+					epoch,
+					doc,
+					signer: account.key,
+					WebSocket,
+					batchMs,
+					...(reconnect === undefined ? {} : { backoff: reconnect }),
+				},
+				{ onStatus: () => undefined, onStopped: () => undefined },
+			);
+			try {
+				await provider.whenSynced(switchTimeoutMs);
+			} catch (error) {
+				doc.destroy();
+				throw error;
+			} finally {
+				provider.destroy();
+			}
+			return doc;
+		});
+	}
+
 	/** Creates a new document from the working copy and syncs with it. Also how to keep local data separately. */
 	createDocumentFromLocal(): Promise<DocumentInfo> {
 		return this.tasks.run(() => this.createFromLocal());

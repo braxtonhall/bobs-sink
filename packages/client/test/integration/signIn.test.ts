@@ -109,6 +109,20 @@ describe("signing in on another device", () => {
 		expect(items(phone)).toEqual({ laptop: 1, shared: "laptop" });
 	});
 
+	it("can read a remote document without touching local data", async () => {
+		const phone = await phoneWithLocalData({ phone: 2 });
+		await phone.signIn({ unmatched: "choose" });
+
+		const remote = await phone.readDocument(documentId);
+		remote.getMap("items").set("ignored", 3);
+
+		expect(remote.getMap("items").toJSON()).toEqual({ laptop: 1, shared: "laptop", ignored: 3 });
+		expect(items(phone)).toEqual({ phone: 2 });
+		expect(phone.document).toBeUndefined();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(items(laptopClient)).toEqual({ laptop: 1, shared: "laptop" });
+	});
+
 	it("asks for sign-in once a device key is revoked, then resumes with edits made meanwhile", async () => {
 		const phone = await openOn(new TestDevice(server, laptop.passkey));
 		await phone.signIn({ unmatched: "choose" });
